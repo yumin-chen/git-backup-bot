@@ -1,6 +1,6 @@
-# BackupBot
+# git-backup-bot
 
-BackupBot is a production-grade automated backup system that continuously monitors local directories, commits changes to Git repositories with LFS support, and pushes updates to remote storage.
+`git-backup-bot` is a production-grade automated backup system that continuously monitors local directories, commits changes to Git repositories with LFS support, and pushes updates to remote storage.
 
 ## Features
 
