@@ -1,0 +1,69 @@
+# BackupBot Configuration Example
+# Schema version
+version: 1.0
+
+# Monitored directories
+# List of local directories to monitor for changes.
+directories:
+  - path: /data/folder1 # This path is inside the container
+    ignore_patterns:
+      - "*.tmp"
+      - "node_modules/"
+  - path: /data/folder2 # Example of a second watched folder
+
+# Git repository settings
+git:
+  remote_url: "git@github.com:user/repo.git"
+  branch: "main"
+  # Bot identity for commits
+  user_name: "BackupBot"
+  user_email: "backupbot@example.com"
+  # Commit batching settings
+  commit_batch:
+    max_files: 1000 # Max files before triggering a commit
+    max_delay: 300 # Max delay in seconds since last commit
+
+# Git LFS settings
+lfs:
+  # Automatically track files above this size (e.g., "10MB", "1GB")
+  track_threshold: "50MB"
+  # Patterns for files to track with LFS
+  track_patterns:
+    - "*.iso"
+    - "*.zip"
+    - "*.psd"
+  # LFS quota monitoring and alerts
+  quota_warning_threshold: 80 # Percentage
+
+# Debounce settings for file system events
+debounce:
+  # Time to wait for more changes before processing (in seconds)
+  delay: 10
+
+# Push settings
+push:
+  # Retry settings for failed pushes
+  retry:
+    max_attempts: 5
+    backoff_factor: 2 # Exponential backoff
+
+# Encryption settings (optional)
+encryption:
+  # 'git-crypt' or 'gpg'
+  provider: "git-crypt"
+  # GPG key ID if using GPG
+  gpg_key_id: ""
+
+# Logging settings
+logging:
+  level: "INFO" # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  file_path: "/usr/src/app/logs/backup.log"
+
+# Health monitoring and alerting
+monitoring:
+  # Port for Prometheus metrics endpoint
+  metrics_port: 9090
+  # Alerting rules
+  alerts:
+    # Alert if no successful push in this many hours
+    push_stale_hours: 6
