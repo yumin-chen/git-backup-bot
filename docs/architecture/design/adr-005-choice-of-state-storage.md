@@ -1,11 +1,11 @@
 # ADR-003: Choice of State Storage
 
 **Date:** 2025-11-30
-**Status:** Accepted
+**Status:** : Proposed
 
 ## Context
 
-The BackupBot application requires a persistent storage mechanism to maintain its internal state and ensure operational resilience. This state includes the change queue, push history, LFS usage metrics, and checkpoints for crash recovery. The chosen solution must be lightweight, self-contained, and not require an external server or complex setup, aligning with the project's goal of being easy to deploy and manage, even in self-hosted environments.
+The `git-backup-got` application requires a persistent storage mechanism to maintain its internal state and ensure operational resilience. This state includes the change queue, push history, LFS usage metrics, and checkpoints for crash recovery. The chosen solution must be lightweight, self-contained, and not require an external server or complex setup, aligning with the project's goal of being easy to deploy and manage, even in self-hosted environments.
 
 ## Decision
 
