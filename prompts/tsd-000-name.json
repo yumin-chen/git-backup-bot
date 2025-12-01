@@ -1,126 +1,62 @@
 {
-  "version": "2.1",
-  "date": "2025-11-30",
+  "version": "3.0",
+  "date": "2025-12-01",
   "status": "production-ready",
   "license": "MIT/Apache-2.0",
   "executive_summary": {
-    "objective": "Automated backup system for continuous monitoring, Git commits with LFS,\nremote storage sync, emphasizing sovereignty, resilience, security, extensibility.\n",
+    "objective": "Automated backup and revision archival system in Go using a containerized Jujutsu (jj) VCS runtime. Watches directories with jj's native watcher, commits to a shadow jj repo, and pushes to remote Git/JJ endpoints.\n",
     "scope": {
       "in_scope": [
-        "File monitoring",
-        "Git operations",
-        "LFS handling",
-        "Containerized deployment",
-        "Restore functionality",
-        "Monitoring & alerting"
+        "Jujutsu-based file monitoring and revisioning",
+        "Containerized shadow environment",
+        "Multi-remote sync (Git/JJ/Gitea/Codeberg)",
+        "Restore operations",
+        "Observability & health",
+        "Optional encryption layer"
       ],
       "out_of_scope": [
-        "Real-time replication",
-        "Blockchain-based storage",
-        "Windows filesystem monitoring (v1.0)"
+        "Real-time block-level replication",
+        "Windows support (initial release Linux/macOS only)",
+        "Native Git manipulation (only via Jujutsu Git interop)"
       ]
     }
   },
   "technology_stack": {
     "core_dependencies": [
       {
-        "name": "Docker Engine",
-        "type": "container_runtime",
-        "origin": "US",
-        "governance": "Open Source",
-        "risk": "high",
-        "alternatives": [
-          "Podman",
-          "containerd"
-        ]
-      },
-      {
-        "name": "Alpine Linux",
-        "type": "base_image",
-        "origin": "Switzerland",
-        "governance": "community",
-        "risk": "low",
-        "alternatives": [
-          "Debian",
-          "Ubuntu"
-        ]
-      },
-      {
-        "name": "Git",
-        "type": "version_control",
-        "origin": "US",
-        "governance": "GPLv2",
-        "risk": "medium",
-        "alternatives": [
-          "Fossil",
-          "Pijul"
-        ]
-      },
-      {
-        "name": "Git LFS",
-        "type": "lfs_extension",
-        "origin": "US",
-        "governance": "MIT",
-        "risk": "high",
-        "alternatives": [
-          "git-annex",
-          "DVC"
-        ]
-      },
-      {
-        "name": "Python 3.11+",
+        "name": "Go 1.23+",
         "type": "language",
-        "origin": "US",
-        "governance": "PSF",
-        "risk": "medium",
-        "alternatives": [
-          "Go",
-          "Rust"
-        ]
+        "governance": "Open Source"
       },
       {
-        "name": "watchdog",
-        "type": "file_monitoring",
-        "origin": "global",
-        "governance": "Apache 2.0",
-        "risk": "low",
-        "alternatives": [
-          "inotify-tools",
-          "entr"
-        ]
+        "name": "Jujutsu (jj)",
+        "type": "vcs_engine",
+        "governance": "EU/Global"
       },
       {
-        "name": "PyYAML",
-        "type": "config_parser",
-        "origin": "global",
-        "governance": "MIT",
-        "risk": "low",
-        "alternatives": [
-          "TOML",
-          "JSON"
-        ]
+        "name": "Jujutsu builtin fswatch",
+        "type": "watcher",
+        "governance": "EU"
       },
       {
-        "name": "SQLite",
+        "name": "Podman / Docker",
+        "type": "container_runtime",
+        "governance": "Open Source"
+      },
+      {
+        "name": "SQLite (Go bindings)",
         "type": "state_storage",
-        "origin": "US",
-        "governance": "public_domain",
-        "risk": "low",
-        "alternatives": [
-          "PostgreSQL",
-          "LMDB"
-        ]
+        "governance": "Public Domain"
       },
       {
-        "name": "git-crypt",
+        "name": "age or GPG",
         "type": "encryption",
-        "origin": "US",
-        "governance": "GPLv3",
-        "risk": "medium",
-        "alternatives": [
-          "gpg",
-          "age"
-        ]
+        "governance": "Open Source"
+      },
+      {
+        "name": "go-yaml",
+        "type": "config_parser",
+        "governance": "Open Source"
       }
     ],
     "remote_storage": {
@@ -142,253 +78,112 @@
           "self_hosted": true,
           "open_source": "MIT",
           "jurisdiction": "US/EU"
-        },
-        {
-          "name": "GitLab.com",
-          "self_hosted": false,
-          "open_source": "partial",
-          "jurisdiction": "US/EU"
-        },
-        {
-          "name": "GitHub",
-          "self_hosted": false,
-          "open_source": "partial",
-          "jurisdiction": "US"
         }
-      ]
-    },
-    "monitoring": {
-      "preferred_stack": [
-        "VictoriaMetrics",
-        "Netdata"
-      ],
-      "alternative_us_stack": [
-        "Prometheus",
-        "Grafana",
-        "Loki"
       ]
     }
   },
   "architecture": {
-    "host": {
-      "watched_folders": [],
-      "state_storage": "/persistent/backup.db",
-      "logs": "/var/log/backup"
-    },
-    "container": {
-      "name": "backup-bot",
-      "components": [
+    "high_level_overview": "Two-container architecture: backup-bot (Go binary) and jj-sidecar (Jujutsu runtime).",
+    "components": {
+      "backup_bot": [
+        "Config Parser (YAML)",
+        "State Database (SQLite)",
+        "Queue Manager",
         {
-          "name": "Watcher",
-          "description": "Monitors directories, debounce, ignore patterns"
+          "Sync Manager (jj": "add -> commit -> push)"
         },
-        {
-          "name": "ChangeQueue",
-          "description": "Persistent queue with checkpoints"
-        },
-        {
-          "name": "ConfigParser",
-          "description": "YAML validation and hot reload"
-        },
-        {
-          "name": "GitSyncManager",
-          "description": "Add → Commit → Push"
-        },
-        {
-          "name": "LFSHandler",
-          "description": "Auto-track large files, quota monitoring, alerting"
-        },
-        {
-          "name": "EncryptionLayer",
-          "description": "Optional git-crypt or GPG"
-        },
-        {
-          "name": "CredentialManager",
-          "description": "SSH keys/tokens, read-only mounts"
-        },
-        {
-          "name": "HealthMonitor",
-          "description": "Metrics, connectivity, disk space, last push"
-        },
-        {
-          "name": "RestoreManager",
-          "description": "Full/selective restore, metadata index"
-        }
+        "Encryption layer",
+        "Metrics & Health",
+        "Restore Manager"
+      ],
+      "jj_sidecar": [
+        "Shadow workspace",
+        "Operation log",
+        "Clean DAG",
+        "Filesystem watcher (jj native)",
+        "Temp workspace",
+        "Git interoperability"
       ]
-    },
-    "remote": {
-      "repository": {
-        "type": "Git"
-      },
-      "lfs_storage": {
-        "type": "LFS"
-      }
     }
   },
-  "data_flow_states": [
-    {
-      "name": "Watched",
-      "trigger": "initial_configuration"
-    },
-    {
-      "name": "Detected",
-      "trigger": "file_system_event"
-    },
-    {
-      "name": "Queued",
-      "trigger": "debounce_expiry"
-    },
-    {
-      "name": "Staged",
-      "trigger": "queue_processing"
-    },
-    {
-      "name": "Committed",
-      "trigger": "staging_success"
-    },
-    {
-      "name": "LFS-Processed",
-      "trigger": "size_detection"
-    },
-    {
-      "name": "Pushed",
-      "trigger": "network_success"
-    },
-    {
-      "name": "Failed",
-      "trigger": "network_or_auth_failure"
-    }
+  "execution_flow": [
+    "jj-sidecar watches host-mounted directories.",
+    "jj updates workspace \"dirty\" state, emits event.",
+    "backup-bot receives and debounces change events.",
+    "Stages changes, creates jj operation and revision.",
+    "Pushes revision to remote.",
+    "State stored in SQLite."
   ],
   "functional_requirements": {
     "file_monitoring": {
-      "recursive_monitoring": true,
-      "event_types": [
-        "create",
-        "modify",
-        "delete"
-      ],
-      "ignore_patterns": true,
+      "watcher": "Jujutsu built-in file watcher",
       "debounce_seconds": 10,
-      "symlink_handling": true,
-      "exclude_system_files": true,
-      "large_tree_support": true,
-      "rapid_churn_handling": true
+      "respects_jj_ignore": true,
+      "follow_symlinks_configurable": true
     },
-    "git_operations": {
-      "init_repo": true,
-      "configure_identity": true,
-      "timestamped_commits": true,
-      "branch_tag_strategy": "timestamped",
-      "retry_push_attempts": 3,
-      "conflict_handling": "reject_and_alert",
-      "shallow_clone_restore": true,
-      "batching_strategy": {
-        "threshold_files": 100,
-        "max_time_seconds": 300,
-        "atomic_commits": true
-      }
+    "jujutsu_operations": {
+      "track": "jj track",
+      "new_commit": "jj new",
+      "describe": "jj describe",
+      "branching_strategy": "backup/<HOST>/<DIR_NAME>",
+      "push": "jj git push <remote> --branch backup/<...>"
     },
-    "lfs_integration": {
-      "auto_track_threshold_mb": 100,
-      "track_by_extension": true,
-      "quota_monitoring": true,
-      "alert_threshold_percent": 80,
-      "prune_policy": "manual_or_cron",
-      "upload_verification": true
+    "git_lfs_equivalent": {
+      "import": "jj git-lfs import",
+      "push": "jj git-lfs push"
     },
-    "configuration_management": {
-      "format": "YAML",
-      "validation": true,
-      "hot_reload": true,
-      "encryption_options": "git-crypt_or_GPG"
-    },
-    "restore_operations": {
-      "list_backups": true,
-      "restore_full": true,
-      "restore_single_file": true,
-      "custom_path_restore": true,
-      "integrity_verification": true
-    }
+    "restore_operations": [
+      "List jj revisions",
+      "Checkout revision to temporary workspace",
+      "Restore individual files or entire tree",
+      "Verify against jj's object hash"
+    ]
   },
   "non_functional_requirements": {
     "performance": {
-      "detection_latency_seconds": "<1",
-      "commit_time_seconds": "<10",
-      "push_time_seconds": "<60 per GB",
-      "memory_usage_mb": "<256",
-      "idle_cpu_percent": "<5",
-      "queue_throughput_files_per_sec": ">500"
+      "file_detection_latency_ms": "<250",
+      "commit_creation_seconds": "<5 for 1000 files",
+      "memory_usage_mb": "<120",
+      "queue_throughput_events_per_sec": ">1000"
     },
-    "reliability": {
-      "graceful_shutdown": true,
-      "crash_recovery": true,
-      "retry_logic": true,
-      "disk_space_monitoring": true,
-      "lfs_verification": true
-    },
-    "security": {
-      "non_root_execution": true,
-      "read_only_mounts": true,
-      "secrets_in_images_logs": false,
-      "optional_encryption": true,
-      "audit_logging": true,
-      "key_rotation_support": true
-    },
-    "scalability": {
-      "max_monitored_directories": 10,
-      "max_files_per_directory": 100000,
-      "repository_size_limit_gb": 50,
-      "max_lfs_object_size_gb": 5,
-      "horizontal_scaling": true,
-      "sharding": true
-    }
-  },
-  "monitoring_observability": {
-    "metrics": {
-      "committed_files": true,
-      "push_duration": true,
-      "lfs_usage": true,
-      "push_failures": true,
-      "queue_size": true
-    },
-    "health_checks": {
-      "remote_connectivity": true,
-      "disk_space": true,
-      "last_push_success": true
-    },
-    "alerts": {
-      "push_stale_hours": 6,
-      "lfs_quota_percent": 80,
-      "push_failure_rate_threshold": 0.1,
-      "queue_backlog_threshold": 1000
-    }
-  },
-  "deployment": {
-    "containerization": {
-      "multi_stage_build": true,
-      "non_root_user": true,
-      "persistent_mounts": [
-        "data",
-        "state",
-        "logs"
-      ],
-      "read_only_root": "optional",
-      "env_validation": true,
-      "graceful_shutdown": true
-    },
-    "scaling": {
-      "increase_inotify_limit": true,
-      "horizontal_containers": true,
-      "repository_sharding": true
-    }
-  },
-  "compliance": {
-    "preferred_providers": [
-      "Gitea",
-      "Codeberg"
+    "reliability": [
+      "jj operation log in shadow container",
+      "SQLite checkpointing",
+      "Restart-safe file monitoring"
     ],
-    "optional_client_side_encryption": true,
-    "monitor_provider_policies": true,
-    "documentation_for_audit": true
-  }
+    "security": [
+      "Full isolation by containerizing jj",
+      "No secret storage in logs",
+      "Optional age-encryption"
+    ],
+    "scalability": {
+      "watched_directories_per_instance": 20,
+      "files_per_workspace": 500000,
+      "horizontal_scaling": "multiple shadow containers"
+    }
+  },
+  "monitoring_observability": [
+    {
+      "Minor text changes": "Git -> JJ"
+    }
+  ],
+  "deployment_specifications": {
+    "two_container_deployment": [
+      "backup-bot (Go binary)",
+      "jj-sidecar (Jujutsu runtime)"
+    ],
+    "details": [
+      "Run rootless",
+      "Connect via gRPC or Unix socket",
+      "Shared host mount for data",
+      "Persistent volumes for state, oplog, and store"
+    ],
+    "scaling": [
+      "Multiple jj-sidecar instances",
+      "Sharded repositories"
+    ]
+  },
+  "compliance_data_sovereignty": [
+    "No changes except terminology (Git -> Git/JJ)"
+  ]
 }
