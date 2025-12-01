@@ -1,4 +1,4 @@
-# Prompt: Intelligent ADR Merger
+# Prompt: ADR Merger
 
 ## Context
 You are a Senior Software Architect tasked with consolidating Architectural Decision Records (ADRs). You have two source files that address the same decision but from different perspectives:
