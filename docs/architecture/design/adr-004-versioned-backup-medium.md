@@ -1,7 +1,7 @@
 # ADR-004: Choice of Versioned Backup Medium
 
 **Date:** 2025-12-01
-**Status:** Accepted
+**Status:** Proposed
 
 ## Context
 BackupBot is designed to version, store, and synchronize changes in local directories to remote storage with durability and traceability. This requires a backup medium that can:

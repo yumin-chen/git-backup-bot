@@ -1,7 +1,7 @@
 # ADR-006: Configuration Format and Management Library Selection
 
 **Date:** 2025-12-01
-**Status:** Accepted
+**Status:** Proposed
 
 ## Context
 The `git-backup-bot` application requires a human-editable configuration file to define its behavior, including directories to monitor, Git remote details, LFS thresholds, retry policies, and encryption options. The configuration system must be versioned, easy to read and write for humans, support hierarchical structures, allow comments for documentation, and integrate cleanly with the Python codebase. It must also support schema validation to ensure correctness before runtime.

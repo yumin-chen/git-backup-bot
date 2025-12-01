@@ -1,7 +1,7 @@
 # ADR-002: Choice of Base Image
 
 **Date:** 2025-11-30  
-**Status:** Accepted
+**Status:** Proposed
 
 ## Context
 BackupBot must run in a lightweight, secure, and maintainable container environment. The base image determines default packages, update cadence, security profile, and compatibility with application dependencies.
