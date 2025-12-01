@@ -1,6 +1,6 @@
-# git-backup-bot
+# BackupBot
 
-`git-backup-bot` is a production-grade automated backup system that continuously monitors local directories, commits changes to Git repositories with LFS support, and pushes updates to remote storage.
+BackupBot is a production-grade automated backup system that continuously monitors local directories, commits changes to Git repositories with LFS support, and pushes updates to remote storage.
 
 ## Features
 
@@ -43,11 +43,25 @@
 5. Run the container:
    ```bash
    podman run -d --name backup-bot \
-     -v ./config:/usr/src/app/config \
-     -v /path/to/your/data:/path/to/your/data \
-     -v /path/to/ssh/keys:/root/.ssh:ro \
+     -v ./config:/usr/src/app/config:ro \
+     -v /path/to/your/data:/data/folder1 \
+     -v /path/to/ssh/keys:/home/appuser/.ssh:ro \
      backup-bot
    ```
+
+### Viewing Logs
+
+To view the application's logs, use the `podman logs` command:
+
+```bash
+podman logs backup-bot
+```
+
+To follow the logs in real-time, use the `-f` flag:
+
+```bash
+podman logs -f backup-bot
+```
 
 ## Contributing
 

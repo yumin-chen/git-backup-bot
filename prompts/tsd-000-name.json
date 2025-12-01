@@ -4,7 +4,7 @@
   "status": "production-ready",
   "license": "MIT/Apache-2.0",
   "executive_summary": {
-    "objective": "Automated backup system for continuous monitoring, Git commits with LFS,\nremote storage sync, emphasizing sovereignty, resilience, security, extensibility.\n",
+    "objective": "Automated backup system for continuous monitoring, Git commits with LFS, remote storage sync, emphasizing sovereignty, resilience, security, extensibility.",
     "scope": {
       "in_scope": [
         "File monitoring",

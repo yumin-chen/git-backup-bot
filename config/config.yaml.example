@@ -5,11 +5,11 @@ version: 1.0
 # Monitored directories
 # List of local directories to monitor for changes.
 directories:
-  - path: /path/to/your/data1
+  - path: /data/folder1 # This path is inside the container
     ignore_patterns:
       - "*.tmp"
       - "node_modules/"
-  - path: /path/to/your/data2
+  - path: /data/folder2 # Example of a second watched folder
 
 # Git repository settings
 git:
