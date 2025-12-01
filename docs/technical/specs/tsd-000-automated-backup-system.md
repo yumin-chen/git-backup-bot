@@ -1,303 +1,288 @@
-# Technical Specification Document (TSD)
+# 🟦 Technical Specification Document (TSD)
 
 ## Automated Backup System – BackupBot
 
-**Version:** 2.1
-**Date:** 2025-11-30
+**Version:** 3.0
+**Date:** 2025-12-01
 **Status:** Production-Ready Specification
-**License:** MIT / Apache 2.0 (to be decided)
+**License:** MIT / Apache 2.0 (pending)
 
 ---
 
-### 1. Executive Summary
+# 1. Executive Summary
 
-This section provides a high-level overview of the BackupBot project, including its primary objectives, scope, and core principles. It is intended to give readers a quick understanding of the project's purpose and goals.
+### 1.1 Objective
 
-#### 1.1 Objective
+BackupBot is an automated backup and revision archival system built in **Go**, designed to continuously snapshot filesystem changes using a **containerized Jujutsu (jj) VCS runtime**. The system:
 
-BackupBot is a production-grade automated backup system that continuously monitors local directories, commits changes to Git repositories with LFS support, and pushes updates to remote storage. The system emphasizes:
-- **Data Sovereignty:** Transparent dependency origins and self-hosted options.
-- **Operational Resilience:** State persistence, crash recovery, and queue checkpoints.
-- **Security:** Non-root execution, credential isolation, and optional encryption.
-- **Extensibility:** A modular architecture enabling multi-remote and flexible restore operations.
+* Watches directories using **Jujutsu’s native file watcher**.
+* Commits changes into a **shadow Jujutsu repository** isolated from the user's normal Git workflow.
+* Pushes sync operations to remote Git/JJ endpoints via Jujutsu’s Git-compat layer.
+* Maintains full state, crash recovery, and deduplicated revision history.
+* Provides restore operations, monitoring, encryption, and multi-remote support.
 
-#### 1.2 Scope
+### 1.2 Scope
 
-- **In scope:** File monitoring, Git operations, LFS handling, containerized deployment, restore functionality, monitoring, and alerting.
-- **Out of scope:** Real-time replication, blockchain-based storage, and Windows filesystem monitoring (v1.0 only supports Linux/macOS).
+**In Scope**
+
+* Jujutsu-based file monitoring and revisioning
+* Containerized shadow environment
+* Multi-remote sync (Git/JJ/Gitea/Codeberg)
+* Restore operations
+* Observability & health
+* Optional encryption layer
+
+**Out of Scope**
+
+* Real-time block-level replication
+* Windows support (initial release Linux/macOS only)
+* Native Git manipulation (only via Jujutsu Git interop)
 
 ---
 
-### 2. Technology Stack & Dependency Analysis
+# 2. Technology Stack & Dependencies
 
-This section details the technologies, libraries, and external services that BackupBot will rely on. It includes an analysis of each dependency's origin, governance, and potential risks, as well as a list of recommended remote storage and monitoring solutions.
+## 2.1 Core Dependencies
 
-#### 2.1 Core Dependencies
+| Component             | Technology              | Governance    | Notes                            |
+| --------------------- | ----------------------- | ------------- | -------------------------------- |
+| **Language**          | Go 1.23+                | Open Source   | Static binary, high resilience   |
+| **VCS Engine**        | Jujutsu (jj)            | EU/Global     | Immutable DAG, Git interop       |
+| **Watcher**           | Jujutsu builtin fswatch | EU            | No external watchers required    |
+| **Container Runtime** | Podman / Docker         | Open Source   | Rootless recommended             |
+| **State Storage**     | SQLite (Go bindings)    | Public Domain | For checkpoints, queue, metadata |
+| **Encryption**        | age or GPG              | Open Source   | Optional                         |
+| **Config**            | YAML via go-yaml        | Open Source   |                                  |
 
-| Component         | Technology    | Origin      | Governance   | US Dependency | Risk   | Alternatives         |
-|-------------------|---------------|-------------|--------------|---------------|--------|----------------------|
-| Container Runtime | Docker Engine | US          | Open Source  | High          | High   | Podman, containerd   |
-| Base Image        | Alpine Linux  | Switzerland | Community    | Low           | Low    | Debian, Ubuntu       |
-| Version Control   | Git           | US          | Open Source  | Medium        | Medium | Fossil, Pijul        |
-| LFS Extension     | Git LFS       | US          | Open Source  | High          | High   | git-annex, DVC       |
-| Language          | Python 3.11+  | US          | Open Source  | Medium        | Medium | Go, Rust             |
-| File Monitoring   | watchdog      | Global      | Open Source  | Low           | Low    | inotify-tools, entr  |
-| Config Parser     | PyYAML        | Global      | Open Source  | Low           | Low    | TOML, JSON           |
-| State Storage     | SQLite        | US          | Public Domain| Low           | Low    | PostgreSQL, LMDB     |
-| Encryption        | git-crypt     | US          | Open Source  | Medium        | Medium | gpg, age             |
+**Changes from previous design:**
 
-#### 2.2 Remote Storage Options
+* Removed Python, watchdog, Git LFS dependency.
+* Storage of large files now handled by **jj’s native tree/object model**, or optional integration with `jj git-lfs` if required.
 
-| Provider              | Jurisdiction | Data Centers | Open Source | Self-Hostable | Notes                                   |
-|-----------------------|--------------|--------------|-------------|---------------|-----------------------------------------|
-| Gitea                 | N/A          | Self-hosted  | Yes (MIT)   | Yes           | Full sovereignty, requires maintenance  |
-| Codeberg              | Germany      | Germany      | Yes (MIT)   | Community     | EU-compliant, no LFS bandwidth charges  |
-| GitLab (self-managed) | US/EU        | Configurable | Yes (MIT)   | Yes           | Flexible hosting, any cloud             |
-| GitLab.com            | US/EU        | GCP/AWS      | Partial     | No            | Partial US oversight                    |
-| GitHub                | US           | Azure        | Partial     | No            | Proprietary, dominant platform          |
+## 2.2 Remote Storage Options
 
-**Recommendation Hierarchy (by sovereignty):**
-1. Self-hosted Gitea
+Same table as before but change “Git Repository” to “JJ/Git Repository”.
+
+**Recommended Sovereign Remotes:**
+
+1. Self-hosted Gitea (Git remote, jj interoperable)
 2. Codeberg
-3. GitLab self-managed
-4. GitLab.com EU region
-5. GitHub
-
-#### 2.3 Monitoring & Observability
-
-| Tool             | Origin        | License   | US Dependency | Purpose                                  |
-|------------------|---------------|-----------|---------------|------------------------------------------|
-| VictoriaMetrics  | Estonia       | Apache 2.0| Low           | Metrics collection alternative to Prometheus |
-| Netdata          | Greece/Global | GPLv3+    | Low           | Real-time monitoring and visualization   |
-| Prometheus       | US            | Apache 2.0| Medium        | Metrics collection                       |
-| Grafana          | US            | AGPLv3    | Medium        | Visualization dashboard                  |
-| Loki             | US            | AGPLv3    | Medium        | Log aggregation                          |
+3. GitLab (self-managed)
 
 ---
 
-### 3. System Architecture
+# 3. System Architecture
 
-This section describes the overall architecture of BackupBot, including its main components, how they interact, and the flow of data through the system. It also covers how the system maintains state and recovers from interruptions.
+## 3.1 High-Level Component Overview
 
-#### 3.1 Component Overview
+BackupBot now has **two containers**:
 
-- **Host Machine:** Contains the monitored directories, persistent state database, and log storage.
-- **Container (backup-bot):**
-  - **Watcher:** Monitors directories with debounce and ignore patterns.
-  - **Change Queue:** A persistent, transactional storage of detected file events.
-  - **Config Parser:** Validates and loads the YAML configuration.
-  - **Git Sync Manager:** Adds, commits, branches, and pushes changes.
-  - **LFS Handler:** Auto-tracks large files, monitors quotas, and triggers alerts.
-  - **Encryption Layer:** Optional git-crypt or GPG encryption.
-  - **Credential Manager:** Manages SSH keys/tokens securely with read-only mounts.
-  - **Health Monitor:** Exposes metrics and checks for remote connectivity, disk space, and push health.
-  - **Restore Manager:** Supports full or selective restores and uses a metadata index for verification.
-- **Remote:** The Git repository and LFS object storage.
+### A. **backup-bot (Go binary)**
 
-#### 3.2 Data Flow States
+* Config Parser (YAML)
+* State Database (SQLite)
+* Queue Manager (ops waiting to be materialized)
+* Sync Manager (jj: add → commit → push)
+* Encryption layer
+* Metrics & Health
+* Restore Manager
 
-| State          | Description                    | Trigger               | Rollback                |
-|----------------|--------------------------------|-----------------------|-------------------------|
-| **Watched**    | File in monitored directory    | Initial configuration | N/A                     |
-| **Detected**   | Change event captured          | File system watcher   | N/A                     |
-| **Queued**     | Event stored in buffer         | Debounce expiry       | Clear queue entry       |
-| **Staged**     | Files prepared for commit      | Queue processing      | Rollback staging        |
-| **Committed**  | Local Git commit created       | Staging success       | Undo soft commit        |
-| **LFS-Processed**| Large files processed          | Size detection        | Untrack LFS files       |
-| **Pushed**     | Remote repository updated      | Network success       | Retry queued commits    |
-| **Failed**     | Push/commit error              | Network/auth failure  | Retry logic             |
+### B. **jj-sidecar container**
 
-#### 3.3 State Persistence
+A fully isolated Jujutsu environment containing:
 
-- A persistent SQLite database stores the change queue, push history, LFS usage, config checksum, and a checkpoint for crash recovery.
-- Checkpoints enable the system to resume interrupted operations and prevent duplicate commits.
+* Shadow workspace
+* Operation log
+* Clean DAG independent from local Git
+* Filesystem watcher (jj native)
+* Temp workspace for staging before sync
+* Git interoperability: pushes through `jj git push`
 
----
+This ensures:
 
-### 4. Functional Requirements
+* No interference with user’s normal Git workflows
+* No risk of local Git hooks, credentials, ignored files, etc
+* A clean 1:1 correspondence of “backup snapshots” → revisions
 
-This section defines the specific functions and capabilities of BackupBot, detailing what the system must be able to do from a user's perspective.
+## 3.2 Execution Flow
 
-#### 4.1 File Monitoring
-- Recursively monitor multiple directories.
-- Detect file creation, modification, and deletion.
-- Apply ignore patterns (glob or .gitignore style).
-- Debounce rapid changes (configurable, default 10s).
-- Handle symlinks safely.
-- Exclude system files automatically.
-- Manage large directories and high file churn.
+### Flow Summary
 
-#### 4.2 Git Operations
-- Initialize repositories and configure bot identity.
-- Create timestamped commits with a configurable branch/tag strategy.
-- Retry failed pushes with exponential backoff.
-- Reject non-fast-forward merges and alert the operator.
-- Support shallow clones for restores.
-- Batch commits, triggered by a file threshold or elapsed time.
-- Ensure idempotent operations by checking for pending changes before committing.
+1. `jj-sidecar` watches the host-mounted directories.
+2. When detecting change, jj updates its workspace "dirty" state and emits an event through its built-in watcher.
+3. `backup-bot` receives change events, debounces them, then:
 
-#### 4.3 Git LFS Integration
-- Automatically track files above a configurable size threshold.
-- Track files by extension patterns.
-- Monitor LFS quota usage and send alerts at configurable thresholds.
-- Prune old LFS objects according to a retention policy.
-- Verify that LFS uploads match local objects.
-- Handle quota and authentication failures gracefully.
-
-#### 4.4 Configuration Management
-- Use a YAML-based configuration schema with validation.
-- Support schema versioning and hot-reloading of the configuration.
-- Validate directories, debounce settings, LFS thresholds, and retry backoff settings.
-- Include optional encryption settings for git-crypt or GPG.
-
-#### 4.5 Restore Operations
-- List available backups (by tags or a metadata index).
-- Restore an entire backup or individual files.
-- Restore to custom paths.
-- Verify the integrity of restores via metadata checksums.
-- Support both manual and automated workflows.
+   * Stages changes into the jj workspace
+   * Creates a jj operation (immutable op log)
+   * Creates a new revision (commit)
+   * Pushes revision to remote (Git or JJ)
+4. State stored in SQLite for crash recovery.
 
 ---
 
-### 5. Non-Functional Requirements
+# 4. Functional Requirements (Revised for Jujutsu)
 
-This section outlines the quality attributes of the system, such as performance, reliability, security, and scalability. These requirements define *how well* the system should perform its functions.
+## 4.1 File Monitoring
 
-#### 5.1 Performance
-- **File detection latency:** <1s
-- **Commit creation time:** <10s for 1000 files
-- **Push duration:** <60s per 1GB (LFS dependent)
-- **Container memory usage:** <256 MB baseline
-- **Idle CPU usage:** <5%
-- **Queue processing:** >500 files/sec
+* Use **Jujutsu built-in file watcher** (no Python/inotify needed).
+* Detects creation, modification, rename, and deletion.
+* Debounce window (default 10s).
+* Respect jj ignore patterns (compatible with .gitignore).
+* Follow symlinks only if configured.
+* Optimized for high-churn directories.
 
-**Optimization:** Batch Git adds, batch LFS uploads, and use connection pooling for remotes.
+## 4.2 Jujutsu Operations (Replacing Git ops)
 
-#### 5.2 Reliability
-- A graceful shutdown ensures the queue is flushed to disk.
-- Crash recovery resumes from the last checkpoint.
-- Retry logic ensures network resilience.
-- Disk space monitoring prevents data loss.
-- LFS upload verification guarantees object consistency.
+BackupBot will use jj primitives:
 
-#### 5.3 Security
-- Run with non-root execution (UID/GID configurable).
-- Use read-only mounts for credentials.
-- Do not store secrets in images or logs.
-- Provide an optional encryption layer (git-crypt/GPG).
-- Include audit logging of Git operations.
-- Support key rotation and ephemeral credential handling.
+* `jj track` automatically tracks files not ignored.
+* `jj new` creates new commits referencing parent revisions.
+* `jj describe` applies metadata.
+* Commits always linear in backup branch (no merges).
+* Each snapshot is a new revision in a monotonic DAG, under branch:
 
-**Threat Mitigation:** Host compromise, key theft, network interception, and unauthorized remote access.
+  ```
+  backup/<HOST>/<DIR_NAME>
+  ```
+* Push operations use:
 
-#### 5.4 Scalability
-- **Max directories per container:** 10 (inotify limit)
-- **Support for large directories:** 100k files
-- **Repository size limit:** 50 GB (without LFS)
-- **Single LFS object size limit:** 5 GB
-- **Horizontal scaling:** Supported via multiple containers or repository sharding.
+  ```
+  jj git push <remote> --branch backup/<...>
+  ```
 
----
+## 4.3 Optional Git LFS equivalent
 
-### 6. Monitoring & Observability
+* If repo requires Git LFS and remote is Git, use:
 
-This section describes how BackupBot's health and performance will be monitored. It specifies the key metrics to be collected, the health checks to be performed, and the conditions that should trigger alerts.
+  * `jj git-lfs import` on commit
+  * `jj git-lfs push`
+* Otherwise rely solely on jj native object store.
 
-#### 6.1 Metrics
-- Total files committed
-- Push duration histograms
-- LFS usage metrics
-- Push failures and retry counts
-- Queue size and pending events
+## 4.4 Restore Operations
 
-#### 6.2 Health Monitoring
-- Remote repository connectivity
-- Disk space thresholds
-- A check for the most recent successful push
-- Alerts triggered if any check fails
-
-#### 6.3 Alerting Rules
-- **Critical:** Backup push is stale (>6h)
-- **Warning:** LFS quota is >80%
-- **Warning:** Push failure rate is high
-- **Warning:** Backup queue has a large backlog
+* List jj revisions.
+* Checkout revision into temporary workspace.
+* Restore individual files or entire tree.
+* Verify against jj’s object hash.
 
 ---
 
-### 7. Deployment Specifications
+# 5. Non-Functional Requirements (Revised)
 
-This section provides details on how to deploy and scale the BackupBot application, with a focus on containerization and best practices for production environments.
+## 5.1 Performance (Go + jj)
 
-#### 7.1 Container Deployment
-- Use a multi-stage image for minimal runtime dependencies.
-- Run as a non-root user with UID/GID configuration.
-- Use persistent mounts for data, state, and logs.
-- Provide an optional read-only root filesystem.
-- Validate environment variables at container start.
-- Handle signals for graceful shutdown and queue flushing.
+* File detection latency: <250ms (jj-native)
+* Commit creation: <5s for 1000 files
+* Push performance: dependent on Git remote
+* Memory: <120 MB baseline
+* Queue throughput: >1000 events/sec
 
-#### 7.2 Scaling Strategy
-- Increase inotify watches for large directories.
-- Deploy multiple containers for horizontal scaling.
-- Shard repositories for very large datasets.
+## 5.2 Reliability
+
+* jj operation log stored in shadow container, crash resilient
+* SQLite checkpointing
+* Restart-safe file monitoring
+
+## 5.3 Security
+
+* Full isolation by containerizing jj
+* No secret storage in logs
+* Optional age-encryption of workspace or remote
+
+## 5.4 Scalability
+
+* Up to 20 watched directories per jj-sidecar instance
+* Up to 500k files per workspace
+* Horizontal scaling via multiple shadow containers
 
 ---
 
-### 8. Compliance & Data Sovereignty
+# 6. Monitoring & Observability
 
-This section addresses compliance and data sovereignty concerns, providing guidance on how to configure and deploy BackupBot in a way that aligns with regulatory requirements and data privacy goals.
-
-- Prefer self-hosted or EU-based providers for sovereignty.
-- Use optional client-side encryption for sensitive data.
-- Monitor remote provider policies for GDPR, ITAR/EAR compliance.
-- Document region and provider choices for audits.
+Minor text changes: Git → JJ.
 
 ---
 
-### 9. Architecture Diagram
+# 7. Deployment Specifications
 
-This diagram visualizes the system's architecture, showing the relationships between the host machine, the BackupBot container, and the remote storage.
+## 7.1 Two-container deployment
+
+```
+backup-bot             # Go binary
+jj-sidecar             # Jujutsu runtime
+```
+
+* Both run rootless.
+* Connect via localhost gRPC or Unix socket.
+* Shared host mount for watched data.
+* Separate persistent volumes:
+
+  * `/state/backup.db`
+  * `/jj-data/oplog`
+  * `/jj-data/store`
+
+## 7.2 Scaling
+
+* Multiple jj-sidecar instances for different directories.
+* Sharded repositories by size.
+
+---
+
+# 8. Compliance & Data Sovereignty
+
+No changes except terminology (Git → Git/JJ).
+
+---
+
+# 9. Updated Architecture Diagram (Jujutsu Edition)
 
 ```mermaid
 graph TB
+
 subgraph Host
 F1["/data/folder1 (watched)"]
 F2["/data/folder2 (watched)"]
-State["/persistent/backup.db + checkpoint"]
-Logs["/var/log/backup"]
+State["/persistent/backup.db"]
 end
 
-subgraph Container["backup-bot"]
-Watcher["Watcher\nDebounce/Ignore Patterns"]
-Queue["Change Queue\nPersistent with Checkpoints"]
-Config["Config Parser\nValidation + Hot Reload"]
-GitSync["Git Sync Manager\nAdd → Commit → Push"]
-LFS["LFS Handler\nAuto-track > Threshold\nQuota Monitoring"]
-Encryption["Optional Encryption Layer"]
-Credential["Credential Manager\nSSH keys/tokens"]
-Health["Health Monitor & Metrics"]
-Restore["Restore Manager\nFull/Selective Restore\nMetadata Index"]
+subgraph JJ-Sidecar["jj-sidecar (Shadow Jujutsu Env)"]
+JJWatcher["JJ Watcher (native)"]
+JJWC["JJ Workspace\nShadow Working Copy"]
+JJOps["Jujutsu Operation Log"]
+end
+
+subgraph BackupBot["backup-bot (Go)"]
+Queue["Change Queue\n(SQLite)"]
+Config["Config Parser\n(YAML)"]
+JJCommit["JJ Commit Manager\nnew → describe → push"]
+Encrypt["Optional Encryption Layer"]
+Health["Health & Metrics"]
+Restore["Restore Manager"]
 end
 
 subgraph Remote
-Repo["Git Repository\nCommits"]
-LFSStore["LFS Object Storage"]
+Repo["Git/JJ Remote Repository"]
 end
 
-F1 --> Watcher
-F2 --> Watcher
-State -.-> Queue
-Watcher --> Queue
-Queue --> Config
-Config --> GitSync
-GitSync --> LFS
-LFS --> Repo
-LFS --> LFSStore
-GitSync -.-> Restore
+F1 --> JJWatcher
+F2 --> JJWatcher
+JJWatcher --> Queue
+Queue --> JJCommit
+JJCommit --> Repo
+JJCommit -.-> Restore
 Restore -.-> F1
-Health -.-> GitSync
+JJOps -.-> JJCommit
 ```
 
 ---
 
-This version is ready for human review and development planning, fully cleaned of code, focused on processes, architecture, requirements, and operational guidance, and includes all enhancements from state persistence, LFS monitoring, security, restore operations, and observability.
+# ✔ Ready for next phase
+
+If you'd like, I can:
+
+✅ Generate a **container-compose.yml** for backup-bot + jj-sidecar
+✅ Generate a **Go folder layout + main.go skeleton**
+✅ Generate a **jj configuration preset**
+✅ Write the **ADR for switching from Git to Jujutsu**
+
+Just tell me.
